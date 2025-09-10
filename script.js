@@ -115,6 +115,51 @@ function addLabel(doc, address, x, y) {
     doc.text(address.phone, x, y);
 }
 
+// Function to generate HTML preview
+function generatePreviewHTML(addresses) {
+    let html = '';
+    addresses.forEach(address => {
+        html += `
+            <div class="label">
+                <div class="sender">
+                    <strong>FROM / SENDER:</strong><br>
+                    ${sender.name}<br>
+                    ${sender.address1}<br>
+                    ${sender.address2}<br>
+                    ${sender.address3}
+                </div>
+                <div class="recipient">
+                    <strong>SHIP TO:</strong><br>
+                    ${address.name}<br>
+                    ${address.address}<br>
+                    ${address.cityPostal}, ${address.province}, ${address.country}<br>
+                    ${address.phone}
+                </div>
+            </div>
+        `;
+    });
+    return html;
+}
+
+// Function to update preview
+function updatePreview() {
+    const input = document.getElementById('addresses').value;
+    const addressLines = input.split('\n').filter(line => line.trim() !== '');
+    const addresses = addressLines.map(line => {
+        try {
+            return parseAddress(line);
+        } catch (e) {
+            return null; // Skip invalid lines
+        }
+    }).filter(addr => addr !== null);
+
+    const previewHTML = generatePreviewHTML(addresses);
+    document.getElementById('preview').innerHTML = previewHTML;
+}
+
+// Event listener for textarea input
+document.getElementById('addresses').addEventListener('input', updatePreview);
+
 // Event listener for generate button
 document.getElementById('generateBtn').addEventListener('click', () => {
     const input = document.getElementById('addresses').value;
