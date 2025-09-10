@@ -32,23 +32,54 @@ const countryCodes = {
     'VATICAN CITY': '+379'
 };
 
+// Helpers for parsing and formatting
+function normalizeCountryName(name) {
+    if (!name) return '';
+    const upper = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+    const aliases = {
+        'ITALIA': 'ITALY',
+        'ESPANA': 'SPAIN',
+        'ALEMANIA': 'GERMANY',
+        'SUIZA': 'SWITZERLAND',
+        'SUICA': 'SWITZERLAND',
+        'FRANCA': 'FRANCE',
+        'BELGICA': 'BELGIUM',
+        'PAISES BAJOS': 'NETHERLANDS',
+        'PAYS-BAS': 'NETHERLANDS',
+        'PAISES BAIXOS': 'NETHERLANDS'
+    };
+    return aliases[upper] || upper;
+}
+
+function joinNonEmpty(parts, sep = ', ') {
+    return parts.filter(p => p && String(p).trim() !== '').join(sep);
+}
+
 // Function to parse address string
 function parseAddress(addressString) {
-    const parts = addressString.split(',').map(part => part.trim());
-    // Assume last 3 parts are: Country, Province/City, Phone
-    // But based on examples, it's more like: Name, ...Address..., City Postal, Province, Country, Phone
-    // For flexibility, we'll take the first part as name, last as phone, second last as country, etc.
-    let phone = parts.pop();
-    let country = parts.pop().toUpperCase();
-    const province = parts.pop(); // May be optional
-    const cityPostal = parts.pop();
-    const address = parts.slice(1).join(', '); // Everything after name
-    const name = parts[0];
+    const parts = addressString.split(',').map(part => part.trim()).filter(p => p.length > 0);
+
+    const name = parts.shift() || '';
+    let phone = parts.pop() || '';
+    const countryOriginal = parts.pop() || '';
+    const countryNormalized = normalizeCountryName(countryOriginal);
 
     // Add country code if missing
-    const code = countryCodes[country];
-    if (code && !phone.startsWith('+')) {
-        phone = code + ' ' + phone.replace(/^\+?\d+\s*/, ''); // Remove any existing + and digits, then add code
+    const code = countryCodes[countryNormalized];
+    if (code && !/^\s*\+/.test(phone)) {
+        phone = `${code} ${phone}`.trim();
+    }
+
+    let address = '';
+    let cityPostal = '';
+    let province = '';
+
+    if (parts.length >= 2) {
+        address = parts.slice(0, -1).join(', ');
+        cityPostal = parts[parts.length - 1];
+    } else if (parts.length === 1) {
+        address = parts[0];
+        cityPostal = '';
     }
 
     return {
@@ -56,7 +87,7 @@ function parseAddress(addressString) {
         address,
         cityPostal,
         province,
-        country,
+        country: countryOriginal,
         phone
     };
 }
@@ -128,6 +159,7 @@ function addLabel(doc, address, x, y) {
 function generatePreviewHTML(addresses) {
     let html = '';
     addresses.forEach(address => {
+        const locationLine = joinNonEmpty([address.cityPostal, address.province, address.country], ', ');
         html += `
             <div class="label">
                 <div class="sender">
@@ -140,8 +172,8 @@ function generatePreviewHTML(addresses) {
                 <div class="recipient">
                     <strong>SHIP TO:</strong><br>
                     ${address.name}<br>
-                    ${address.address}<br>
-                    ${address.cityPostal}, ${address.province}, ${address.country}<br>
+                    ${address.address ? address.address + '<br>' : ''}
+                    ${locationLine ? locationLine + '<br>' : ''}
                     ${address.phone}
                 </div>
             </div>
