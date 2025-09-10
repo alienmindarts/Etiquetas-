@@ -67,52 +67,61 @@ function generatePDF(addresses) {
     let y = 20; // Starting Y position
 
     addresses.forEach((address, index) => {
-        if (y > 200) { // New page if needed (leave space for two labels)
+        if (y > 220) { // New page if needed (leave space for two labels)
             doc.addPage();
             y = 20;
         }
 
         // Left label
-        let x = 20;
-        addLabel(doc, address, x, y);
+        let x = 10;
+        const height1 = addLabel(doc, address, x, y);
 
         // Right label (duplicate)
-        x = 110;
-        addLabel(doc, address, x, y);
+        x = 115;
+        const height2 = addLabel(doc, address, x, y);
 
-        y += 80; // Space for next pair of labels
+        const maxHeight = Math.max(height1, height2);
+        y += maxHeight + 5; // Small space between pairs of labels
     });
 
     return doc;
 }
 
+// Helper function to add wrapped text and return new y
+function addWrappedText(doc, text, x, y, maxWidth, lineHeight = 4) {
+    const lines = doc.splitTextToSize(text, maxWidth);
+    lines.forEach(line => {
+        doc.text(line, x, y);
+        y += lineHeight;
+    });
+    return y;
+}
+
 // Helper function to add a single label
 function addLabel(doc, address, x, y) {
+    const maxWidth = 85; // Prevent overlap with adjacent label
+    const initialY = y;
+
     // Sender section
-    doc.setFontSize(12);
+    doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.text('FROM / SENDER:', x, y);
-    y += 10;
-    doc.text(sender.name, x, y);
-    y += 5;
-    doc.text(sender.address1, x, y);
-    y += 5;
-    doc.text(sender.address2, x, y);
-    y += 5;
-    doc.text(sender.address3, x, y);
-    y += 15;
+    y = addWrappedText(doc, 'FROM / SENDER:', x, y, maxWidth, 4);
+    y = addWrappedText(doc, sender.name, x, y, maxWidth, 4);
+    y = addWrappedText(doc, sender.address1, x, y, maxWidth, 4);
+    y = addWrappedText(doc, sender.address2, x, y, maxWidth, 4);
+    y = addWrappedText(doc, sender.address3, x, y, maxWidth, 4);
+    y += 2; // Small spacing between sections
 
     // Ship to section (bold)
+    doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('SHIP TO:', x, y);
-    y += 10;
-    doc.text(address.name, x, y);
-    y += 5;
-    doc.text(address.address, x, y);
-    y += 5;
-    doc.text(address.cityPostal + ', ' + address.province + ', ' + address.country, x, y);
-    y += 5;
-    doc.text(address.phone, x, y);
+    y = addWrappedText(doc, 'SHIP TO:', x, y, maxWidth, 4);
+    y = addWrappedText(doc, address.name, x, y, maxWidth, 4);
+    y = addWrappedText(doc, address.address, x, y, maxWidth, 4);
+    y = addWrappedText(doc, address.cityPostal + ', ' + address.province + ', ' + address.country, x, y, maxWidth, 4);
+    y = addWrappedText(doc, address.phone, x, y, maxWidth, 4);
+
+    return y - initialY;
 }
 
 // Function to generate HTML preview
@@ -122,7 +131,7 @@ function generatePreviewHTML(addresses) {
         html += `
             <div class="label">
                 <div class="sender">
-                    <strong>FROM / SENDER:</strong><br>
+                    FROM / SENDER:<br>
                     ${sender.name}<br>
                     ${sender.address1}<br>
                     ${sender.address2}<br>
@@ -157,15 +166,58 @@ function updatePreview() {
     document.getElementById('preview').innerHTML = previewHTML;
 }
 
+// Generate PDF by rasterizing each label and placing two identical copies per row
+async function generatePDFFromPreview() {
+    const previewEl = document.getElementById('preview');
+    const labels = Array.from(document.querySelectorAll('#preview .label'));
+    if (!previewEl || labels.length === 0) {
+        return;
+    }
+
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    const margin = 10; // mm
+    const gutter = 5;  // mm between columns and rows
+    const colW = (pageWidth - 2 * margin - gutter) / 2; // mm
+
+    const xLeft = margin;
+    const xRight = margin + colW + gutter;
+    let y = margin;
+
+    for (const el of labels) {
+        // Render each preview label to a canvas (2x for sharpness)
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        const imgData = canvas.toDataURL('image/png');
+
+        const ratio = canvas.height / canvas.width;
+        const imgWmm = colW;
+        const imgHmm = imgWmm * ratio;
+
+        // Page-break if needed
+        if (y + imgHmm > pageHeight - margin) {
+            doc.addPage();
+            y = margin;
+        }
+
+        // Place two identical copies of the same label side-by-side (one row)
+        doc.addImage(imgData, 'PNG', xLeft, y, imgWmm, imgHmm);
+        doc.addImage(imgData, 'PNG', xRight, y, imgWmm, imgHmm);
+
+        // Advance to next row
+        y += imgHmm + gutter;
+    }
+
+    doc.save('shipping-labels.pdf');
+}
+
 // Event listener for textarea input
 document.getElementById('addresses').addEventListener('input', updatePreview);
 
 // Event listener for generate button
-document.getElementById('generateBtn').addEventListener('click', () => {
-    const input = document.getElementById('addresses').value;
-    const addressLines = input.split('\n').filter(line => line.trim() !== '');
-    const addresses = addressLines.map(parseAddress);
-
-    const doc = generatePDF(addresses);
-    doc.save('shipping-labels.pdf');
+document.getElementById('generateBtn').addEventListener('click', async () => {
+    // Ensure preview is current
+    updatePreview();
+    await generatePDFFromPreview();
 });

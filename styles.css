@@ -56,7 +56,7 @@ button:hover {
 
 .label {
     display: inline-block;
-    width: 48%;
+    width: 40%;
     margin: 2px;
     padding: 10px;
     border: 1px solid #ccc;
@@ -69,8 +69,42 @@ button:hover {
 
 .label .sender {
     font-weight: normal;
+    font-size: 8px;
+    line-height: 1.2;
+    margin-bottom: 6px;
 }
 
 .label .recipient {
     font-weight: bold;
+    line-height: 1.2;
+}
+/* PDF consistency overrides */
+.preview-container.pdf-mode {
+  max-height: none;
+  overflow: visible;
+  background-color: #ffffff;
+  border: none;
+  padding: 0;
+  width: 190mm;           /* Match jsPDF content width (A4 width 210mm - 2 * 10mm margins) */
+  margin: 0 auto;
+}
+
+.preview-container.pdf-mode .label {
+  width: 90mm;            /* Two columns of labels */
+  margin: 5mm 5mm 5mm 0;  /* Gap between columns/rows */
+  display: inline-block;
+  vertical-align: top;
+  box-sizing: border-box;
+}
+
+/* Remove right margin on even labels to fit two per row */
+.preview-container.pdf-mode .label:nth-child(2n) {
+  margin-right: 0;
+}
+
+/* Avoid labels breaking across PDF pages */
+.label {
+  box-sizing: border-box;
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
