@@ -56,13 +56,15 @@ button:hover {
 
 .label {
     display: inline-block;
-    width: 45%;
-    margin: 5px;
+    width: 48%;
+    margin: 2px;
     padding: 10px;
     border: 1px solid #ccc;
     background-color: white;
     font-size: 12px;
     line-height: 1.4;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .label .sender {
