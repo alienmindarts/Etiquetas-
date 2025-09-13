@@ -31,22 +31,43 @@ const countryCodes = {
     'SAN MARINO': '+378',
     'VATICAN CITY': '+379'
 };
+let logoDataUrl = null;
 
 // Helpers for parsing and formatting
 function normalizeCountryName(name) {
     if (!name) return '';
     const upper = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
     const aliases = {
+        // Spanish variants
         'ITALIA': 'ITALY',
         'ESPANA': 'SPAIN',
         'ALEMANIA': 'GERMANY',
         'SUIZA': 'SWITZERLAND',
+
+        // Portuguese variants
+        'ESPANHA': 'SPAIN',
+        'ALEMANHA': 'GERMANY',
         'SUICA': 'SWITZERLAND',
         'FRANCA': 'FRANCE',
         'BELGICA': 'BELGIUM',
-        'PAISES BAJOS': 'NETHERLANDS',
+        'PAISES BAIXOS': 'NETHERLANDS',
+        'PAISES-BAIXOS': 'NETHERLANDS',
+        'HOLANDA': 'NETHERLANDS',
+        'DINAMARCA': 'DENMARK',
+        'SUECIA': 'SWEDEN',
+        'NORUEGA': 'NORWAY',
+        'FINLANDIA': 'FINLAND',
+        'IRLANDA': 'IRELAND',
+        'LUXEMBURGO': 'LUXEMBOURG',
+        'CIDADE DO VATICANO': 'VATICAN CITY',
+        'VATICANO': 'VATICAN CITY',
+        'SAO MARINO': 'SAN MARINO',
+
+        // French variant
         'PAYS-BAS': 'NETHERLANDS',
-        'PAISES BAIXOS': 'NETHERLANDS'
+
+        // Spanish variant
+        'PAISES BAJOS': 'NETHERLANDS'
     };
     return aliases[upper] || upper;
 }
@@ -87,7 +108,7 @@ function parseAddress(addressString) {
         address,
         cityPostal,
         province,
-        country: countryOriginal,
+        country: countryNormalized,
         phone
     };
 }
@@ -155,13 +176,15 @@ function addLabel(doc, address, x, y) {
     return y - initialY;
 }
 
-// Function to generate HTML preview
+// Function to generate HTML preview (supports optional top-right logo)
 function generatePreviewHTML(addresses) {
     let html = '';
     addresses.forEach(address => {
         const locationLine = joinNonEmpty([address.cityPostal, address.province, address.country], ', ');
+        const hasLogo = !!logoDataUrl;
         html += `
-            <div class="label">
+            <div class="label ${hasLogo ? 'has-logo' : ''}">
+                ${hasLogo ? `<img class="label-logo" src="${logoDataUrl}" alt="Logo">` : ''}
                 <div class="sender">
                     FROM / SENDER:<br>
                     ${sender.name}<br>
@@ -206,42 +229,80 @@ async function generatePDFFromPreview() {
         return;
     }
 
-    const doc = new jsPDF('p', 'mm', 'a4');
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
+    // Enable PDF-only styling (remove frames, layout tweaks)
+    previewEl.classList.add('pdf-mode');
 
-    const margin = 10; // mm
-    const gutter = 5;  // mm between columns and rows
-    const colW = (pageWidth - 2 * margin - gutter) / 2; // mm
+    try {
+        const doc = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
 
-    const xLeft = margin;
-    const xRight = margin + colW + gutter;
-    let y = margin;
+        // Minimize margins and gutter to maximize size while keeping two columns (~13.5% increase)
+        const margin = 0; // mm
+        const gutter = 0; // mm between columns and rows
+        const colW = (pageWidth - 2 * margin - gutter) / 2; // mm -> 105mm on A4
 
-    for (const el of labels) {
-        // Render each preview label to a canvas (2x for sharpness)
-        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-        const imgData = canvas.toDataURL('image/png');
+        const xLeft = margin;
+        const xRight = margin + colW + gutter;
+        let y = margin;
 
-        const ratio = canvas.height / canvas.width;
-        const imgWmm = colW;
-        const imgHmm = imgWmm * ratio;
+        for (const el of labels) {
+            // Render each preview label to a canvas (2x for sharpness)
+            const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
+            const imgData = canvas.toDataURL('image/png');
 
-        // Page-break if needed
-        if (y + imgHmm > pageHeight - margin) {
-            doc.addPage();
-            y = margin;
+            const ratio = canvas.height / canvas.width;
+            const imgWmm = colW;
+            const imgHmm = imgWmm * ratio;
+
+            // Page-break if needed
+            if (y + imgHmm > pageHeight - margin) {
+                doc.addPage();
+                y = margin;
+            }
+
+            // Place two identical copies of the same label side-by-side (one row)
+            doc.addImage(imgData, 'PNG', xLeft, y, imgWmm, imgHmm);
+            doc.addImage(imgData, 'PNG', xRight, y, imgWmm, imgHmm);
+
+            // Advance to next row
+            y += imgHmm + gutter;
         }
 
-        // Place two identical copies of the same label side-by-side (one row)
-        doc.addImage(imgData, 'PNG', xLeft, y, imgWmm, imgHmm);
-        doc.addImage(imgData, 'PNG', xRight, y, imgWmm, imgHmm);
-
-        // Advance to next row
-        y += imgHmm + gutter;
+        doc.save('shipping-labels.pdf');
+    } finally {
+        // Restore screen styling
+        previewEl.classList.remove('pdf-mode');
     }
+}
 
-    doc.save('shipping-labels.pdf');
+// Logo upload handling
+const logoInputEl = document.getElementById('logoInput');
+const logoPreviewEl = document.getElementById('logoPreview');
+if (logoInputEl) {
+    logoInputEl.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) {
+            // Clear logo if selection was removed
+            logoDataUrl = null;
+            if (logoPreviewEl) {
+                logoPreviewEl.src = '';
+                logoPreviewEl.style.display = 'none';
+            }
+            updatePreview();
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            logoDataUrl = reader.result;
+            if (logoPreviewEl) {
+                logoPreviewEl.src = logoDataUrl;
+                logoPreviewEl.style.display = 'inline-block';
+            }
+            updatePreview();
+        };
+        reader.readAsDataURL(file);
+    });
 }
 
 // Event listener for textarea input

@@ -56,6 +56,7 @@ button:hover {
 
 .label {
     display: inline-block;
+    position: relative;
     width: 40%;
     margin: 2px;
     padding: 10px;
@@ -85,16 +86,17 @@ button:hover {
   background-color: #ffffff;
   border: none;
   padding: 0;
-  width: 190mm;           /* Match jsPDF content width (A4 width 210mm - 2 * 10mm margins) */
+  width: 210mm;           /* Full A4 width (zero margins in PDF) */
   margin: 0 auto;
 }
 
 .preview-container.pdf-mode .label {
-  width: 90mm;            /* Two columns of labels */
-  margin: 5mm 5mm 5mm 0;  /* Gap between columns/rows */
+  width: 80mm;            /* Smaller capture width so placed image is larger (~105/88 ≈ +19% vs source) */
+  margin: 0;              /* No margins during capture */
   display: inline-block;
   vertical-align: top;
   box-sizing: border-box;
+  border: none;           /* Remove framing in PDF only */
 }
 
 /* Remove right margin on even labels to fit two per row */
@@ -107,4 +109,47 @@ button:hover {
   box-sizing: border-box;
   page-break-inside: avoid;
   break-inside: avoid;
+}
+
+/* Controls for logo upload */
+.controls {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.logo-thumb {
+  width: 56px;
+  height: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+}
+
+/* Logo placement inside label */
+.label-logo {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 56px;
+  height: auto;
+  max-height: 56px;
+  object-fit: contain;
+}
+
+/* Add padding so text doesn't overlap the logo */
+.label.has-logo {
+  padding-right: 84px; /* 10px base + ~logo width */
+}
+
+/* PDF capture tweaks for logo sizing */
+.preview-container.pdf-mode .label-logo {
+  width: 64px;
+  max-height: 64px;
+}
+
+.preview-container.pdf-mode .label.has-logo {
+  padding-right: 94px;
 }
