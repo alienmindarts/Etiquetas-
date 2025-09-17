@@ -32,6 +32,8 @@ const countryCodes = {
     'VATICAN CITY': '+379'
 };
 let logoDataUrl = null;
+let defaultLogoDataUrl = null;
+let showLogoEnabled = true;
 
 // Helpers for parsing and formatting
 function normalizeCountryName(name) {
@@ -181,7 +183,7 @@ function generatePreviewHTML(addresses) {
     let html = '';
     addresses.forEach(address => {
         const locationLine = joinNonEmpty([address.cityPostal, address.province, address.country], ', ');
-        const hasLogo = !!logoDataUrl;
+        const hasLogo = !!logoDataUrl && showLogoEnabled;
         html += `
             <div class="label ${hasLogo ? 'has-logo' : ''}">
                 ${hasLogo ? `<img class="label-logo" src="${logoDataUrl}" alt="Logo">` : ''}
@@ -279,6 +281,37 @@ async function generatePDFFromPreview() {
 // Logo upload handling
 const logoInputEl = document.getElementById('logoInput');
 const logoPreviewEl = document.getElementById('logoPreview');
+const showLogoEl = document.getElementById('showLogo');
+
+// Sync checkbox state and wire change handler
+if (showLogoEl) {
+    showLogoEnabled = showLogoEl.checked;
+    showLogoEl.addEventListener('change', () => {
+        showLogoEnabled = showLogoEl.checked;
+        updatePreview();
+    });
+}
+
+// Preload default Aloe SVG as data URL (shown automatically unless user clears or hides)
+(function preloadDefaultLogo() {
+    const defaultLogoSVG = `<svg width="3288" height="3544" viewBox="0 0 3288 3544" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M1552.94 1887.65C1552.94 2309.81 1326.52 2687.5 1011.5 2687.5C1328.31 2687.5 1552.94 3065.22 1552.94 3487.35C1552.94 3065.22 1772.8 2687.5 2094.38 2687.5C1777.58 2687.5 1552.94 2309.81 1552.94 1887.65Z" fill="black"/>
+<path d="M1993.47 1548.02C1993.47 1703.89 1905.99 1843.35 1784.28 1843.35C1906.68 1843.35 1993.47 1982.81 1993.47 2138.68C1993.47 1982.81 2078.42 1843.35 2202.67 1843.35C2080.26 1843.35 1993.47 1703.89 1993.47 1548.02Z" fill="black"/>
+<path d="M630.036 3012.36L1028.73 2027.93L1555.4 713.713L1898.43 1657.78L1898.44 1657.81C1958.63 1566.67 1993.46 1450.69 1993.46 1328.98C1993.46 1601.13 2166.23 1844.68 2410.13 1845.81L1644 0L359.317 3056.66C277.281 3250.27 205.09 3379.88 142.743 3445.51C80.3952 3511.14 32.8144 3543.95 0 3543.95H703.868C605.425 3498.01 556.204 3420.9 556.204 3312.61C556.204 3233.86 580.814 3133.77 630.036 3012.36Z" fill="black"/>
+<path d="M2073.46 2055L2515.22 3066.51C2567.72 3194.48 2593.98 3292.92 2593.98 3361.83C2593.98 3443.87 2552.96 3504.58 2470.92 3543.95H3288C3248.62 3537.39 3194.48 3501.3 3125.57 3435.67C3059.94 3370.04 2991.03 3248.63 2918.84 3071.43L2410.13 1845.81C2264.87 1846.47 2146.38 1930.6 2073.46 2055Z" fill="black"/>
+</svg>`;
+    defaultLogoDataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(defaultLogoSVG);
+
+    // Only set as current logo if user hasn't provided one yet
+    if (!logoDataUrl) {
+        logoDataUrl = defaultLogoDataUrl;
+        if (logoPreviewEl) {
+            logoPreviewEl.src = logoDataUrl;
+            logoPreviewEl.style.display = 'inline-block';
+        }
+        updatePreview();
+    }
+})();
 if (logoInputEl) {
     logoInputEl.addEventListener('change', (e) => {
         const file = e.target.files && e.target.files[0];
