@@ -78,6 +78,52 @@ function joinNonEmpty(parts, sep = ', ') {
     return parts.filter(p => p && String(p).trim() !== '').join(sep);
 }
 
+// Extract postal code and city from a "cityPostal" string, prioritizing rules by country
+function extractPostalAndCity(cityPostalRaw, countryNormalized) {
+    const cleaned = (cityPostalRaw || '').replace(/[;,]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!cleaned) return { postal: '', city: '' };
+
+    const cn = (countryNormalized || '').toUpperCase();
+    // Country-specific patterns to disambiguate 4/5 digit formats
+    const patternsByCountry = {
+        'PORTUGAL': /\b\d{4}-\d{3}\b/,
+        'NETHERLANDS': /\b\d{4}\s?[A-Z]{2}\b/i,
+        'GERMANY': /\b\d{5}\b/,
+        'FRANCE': /\b\d{5}\b/,
+        'ITALY': /\b\d{5}\b/,
+        'SPAIN': /\b\d{5}\b/,
+        'FINLAND': /\b\d{5}\b/,
+        'SWEDEN': /\b\d{3}\s?\d{2}\b/,
+        'BELGIUM': /\b\d{4}\b/,
+        'AUSTRIA': /\b\d{4}\b/,
+        'DENMARK': /\b\d{4}\b/,
+        'NORWAY': /\b\d{4}\b/,
+        'IRELAND': /\b[A-Z]\d{2}\s?[A-Z0-9]{4}\b/i, // Eircode (simplified)
+        'LUXEMBOURG': /\bL?-?\d{4}\b/i,
+        'MONACO': /\b\d{5}\b/,
+        'ANDORRA': /\bAD\d{3}\b/i,
+        'SAN MARINO': /\b\d{5}\b/,
+        'VATICAN CITY': /\b\d{5}\b/
+    };
+
+    let pattern = patternsByCountry[cn] || /\b(\d{4}-\d{3}|\d{4}\s?[A-Z]{2}|\d{5}|\d{3}\s?\d{2}|\d{4})\b/i;
+    const match = cleaned.match(pattern);
+    if (!match) {
+        return { postal: '', city: cleaned };
+    }
+
+    const postal = match[0].toUpperCase();
+    const city = cleaned.replace(match[0], '').replace(/\s+/g, ' ').replace(/^[, ]+|[, ]+$/g, '').trim();
+    return { postal, city };
+}
+
+// Build the location line, ensuring it starts with the postal code when available
+function buildLocationLine(cityPostalRaw, province, countryNormalized) {
+    const { postal, city } = extractPostalAndCity(cityPostalRaw, countryNormalized);
+    const base = postal ? `${postal}${city ? ' ' + city : ''}` : (cityPostalRaw || '').trim();
+    return joinNonEmpty([base, province, countryNormalized], ', ');
+}
+
 // Function to parse address string
 function parseAddress(addressString) {
     const parts = addressString.split(',').map(part => part.trim()).filter(p => p.length > 0);
@@ -99,9 +145,12 @@ function parseAddress(addressString) {
 
     if (parts.length >= 2) {
         address = parts.slice(0, -1).join(', ');
+        // Allow manual line breaks in street address using ';'
+        address = address.split(';').map(s => s.trim()).filter(Boolean).join('\n');
         cityPostal = parts[parts.length - 1];
     } else if (parts.length === 1) {
         address = parts[0];
+        address = address.split(';').map(s => s.trim()).filter(Boolean).join('\n');
         cityPostal = '';
     }
 
@@ -143,10 +192,15 @@ function generatePDF(addresses) {
 
 // Helper function to add wrapped text and return new y
 function addWrappedText(doc, text, x, y, maxWidth, lineHeight = 4) {
-    const lines = doc.splitTextToSize(text, maxWidth);
-    lines.forEach(line => {
-        doc.text(line, x, y);
-        y += lineHeight;
+    const paragraphs = String(text || '').split(/\n/);
+    paragraphs.forEach(par => {
+        const lines = doc.splitTextToSize(par, maxWidth);
+        lines.forEach(line => {
+            if (String(line).trim() !== '') {
+                doc.text(line, x, y);
+            }
+            y += lineHeight;
+        });
     });
     return y;
 }
@@ -172,7 +226,8 @@ function addLabel(doc, address, x, y) {
     y = addWrappedText(doc, 'SHIP TO:', x, y, maxWidth, 4);
     y = addWrappedText(doc, address.name, x, y, maxWidth, 4);
     y = addWrappedText(doc, address.address, x, y, maxWidth, 4);
-    y = addWrappedText(doc, address.cityPostal + ', ' + address.province + ', ' + address.country, x, y, maxWidth, 4);
+    const locationLine = buildLocationLine(address.cityPostal, address.province, address.country);
+    y = addWrappedText(doc, locationLine, x, y, maxWidth, 4);
     y = addWrappedText(doc, address.phone, x, y, maxWidth, 4);
 
     return y - initialY;
@@ -182,8 +237,11 @@ function addLabel(doc, address, x, y) {
 function generatePreviewHTML(addresses) {
     let html = '';
     addresses.forEach(address => {
-        const locationLine = joinNonEmpty([address.cityPostal, address.province, address.country], ', ');
+        const locationLine = buildLocationLine(address.cityPostal, address.province, address.country);
         const hasLogo = !!logoDataUrl && showLogoEnabled;
+        const addressHTML = address.address
+            ? address.address.split('\n').map(s => s.trim()).filter(Boolean).join('<br>')
+            : '';
         html += `
             <div class="label ${hasLogo ? 'has-logo' : ''}">
                 ${hasLogo ? `<img class="label-logo" src="${logoDataUrl}" alt="Logo">` : ''}
@@ -197,7 +255,7 @@ function generatePreviewHTML(addresses) {
                 <div class="recipient">
                     <strong>SHIP TO:</strong><br>
                     ${address.name}<br>
-                    ${address.address ? address.address + '<br>' : ''}
+                    ${addressHTML ? addressHTML + '<br>' : ''}
                     ${locationLine ? locationLine + '<br>' : ''}
                     ${address.phone}
                 </div>
